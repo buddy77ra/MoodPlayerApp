@@ -335,26 +335,11 @@ private void deleteSelected() {
     }
 
     // -------- Seed starter data (editable lists) --------
-    private void seedData() {
-        moodData.put("happy", new ArrayList<>(Arrays.asList(
-            new LinkItem("Happy Single 1", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
-            new LinkItem("Happy Single 2", "https://music.youtube.com/watch?v=xxxxxxxxxxx"),
-            new LinkItem("Happy Album Playlist", "https://open.spotify.com/playlist/xxxxxxxxxxx")
-        )));
-
-        moodData.put("chill", new ArrayList<>(Arrays.asList(
-            new LinkItem("Chill Single 1", "https://www.youtube.com/watch?v=yyyyyyyyyyy"),
-            new LinkItem("Lo-fi Mix", "https://www.youtube.com/watch?v=5qap5aO4i9A"),
-            new LinkItem("Chill Album", "https://open.spotify.com/album/xxxxxxxxxxx")
-        )));
-
-        moodData.put("energetic", new ArrayList<>(Arrays.asList(
-            new LinkItem("Energetic Single 1", "https://www.youtube.com/watch?v=zzzzzzzzzzz"),
-            new LinkItem("Workout Mix", "https://open.spotify.com/playlist/xxxxxxxxxxx"),
-            new LinkItem("High-Energy Album", "https://music.apple.com/ca/album/ID_HERE")
-        )));
-
-        moodData.put("mixed", new ArrayList<>()); // built dynamically
-    }
+ private void seedData() {
+    moodData.put("happy",     new ArrayList<>());
+    moodData.put("chill",     new ArrayList<>());
+    moodData.put("energetic", new ArrayList<>());
+    moodData.put("mixed",     new ArrayList<>()); // auto-built when you click Mixed
+}
 }
 
