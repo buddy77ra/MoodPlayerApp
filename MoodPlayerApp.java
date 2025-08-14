@@ -3,7 +3,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.datatransfer.*;   // Clipboard, DataFlavor
 import java.net.*;               // URL, URI, URLConnection
-import java.io.*;                // InputStream, BufferedReader, etc.
+import java.io.*;                // File, PrintWriter, BufferedReader, etc.
 import java.util.*;
 import java.util.List;
 
@@ -20,51 +20,14 @@ public class MoodPlayerApp {
     // -------- Fields --------
     private JFrame frame;
     private JButton happyButton, chillButton, energeticButton, mixedButton, openButton;
-    private JButton addLinkButton;// from clipboard/prompt
-    private JButton deleteButton;
+    private JButton addLinkButton;            // from clipboard/prompt
+    private JButton deleteButton;             // delete selected
     private JList<LinkItem> playlistList;
     private DefaultListModel<LinkItem> listModel;
     private JLabel nowPlaying;
     private JPanel top;
     private String currentMood = "";
     private JTextField urlField;              // manual paste box
-
-private void deleteSelected() {
-    int index = playlistList.getSelectedIndex();
-    if (index < 0) {
-        JOptionPane.showMessageDialog(frame, "Select a song to delete.");
-        return;
-    }
-
-    LinkItem item = listModel.getElementAt(index);
-
-    // Confirm (optional)
-    int choice = JOptionPane.showConfirmDialog(
-        frame,
-        "Delete \"" + item.title + "\" from \"" + currentMood + "\"?",
-        "Confirm Delete",
-        JOptionPane.YES_NO_OPTION
-    );
-    if (choice != JOptionPane.YES_OPTION) return;
-
-    // Update data model
-    if ("mixed".equals(currentMood)) {
-        // Mixed is rebuilt each time from other lists, so just remove from the visible list
-        listModel.remove(index);
-        // No change to happy/chill/energetic here
-    } else {
-        List<LinkItem> list = moodData.get(currentMood);
-        if (list != null) {
-            // Remove by identity if possible; fallback to index if lengths match
-            boolean removed = list.remove(item);
-            if (!removed && index < list.size()) list.remove(index);
-        }
-        listModel.remove(index);
-    }
-
-    // Clear Now Playing label if we deleted the selected row
-    nowPlaying.setText("Now Playing: —");
-}
 
     // mood -> list
     private final Map<String, List<LinkItem>> moodData = new LinkedHashMap<>();
@@ -106,7 +69,7 @@ private void deleteSelected() {
         playlistList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         JScrollPane scrollPane = new JScrollPane(playlistList);
 
-        // BOTTOM: URL field + Add + Add Link (clipboard) + Open
+        // BOTTOM: URL field + Add + Add Link (clipboard) + Delete + Open
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
 
         bottom.add(new JLabel("URL:"));
@@ -115,11 +78,11 @@ private void deleteSelected() {
 
         JButton addFromUrlButton = new JButton("Add");
         bottom.add(addFromUrlButton);
-        
+
         addLinkButton = new JButton("Add Link"); // from clipboard
         bottom.add(addLinkButton);
 
-        deleteButton = new JButton("Delete Selected");   // <-- add this
+        deleteButton = new JButton("Delete Selected");
         bottom.add(deleteButton);
 
         openButton = new JButton("Open Selected");
@@ -131,22 +94,23 @@ private void deleteSelected() {
         frame.add(bottom, BorderLayout.SOUTH);
 
         // Data
-        seedData();
+        seedData();      // create empty lists
+        loadFromFile();  // load saved links from previous runs
 
         // Actions
-        happyButton.addActionListener(e -> showPlaylist("happy"));
-        chillButton.addActionListener(e -> showPlaylist("chill"));
-        energeticButton.addActionListener(e -> showPlaylist("energetic"));
-        mixedButton.addActionListener(e -> showPlaylist("mixed"));
+        happyButton.addActionListener(evt -> showPlaylist("happy"));
+        chillButton.addActionListener(evt -> showPlaylist("chill"));
+        energeticButton.addActionListener(evt -> showPlaylist("energetic"));
+        mixedButton.addActionListener(evt -> showPlaylist("mixed"));
 
         playlistList.addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) openSelected();
+            @Override public void mouseClicked(MouseEvent evt) {
+                if (evt.getClickCount() == 2) openSelected();
             }
         });
 
-        // Buttons
-        addFromUrlButton.addActionListener(e -> {
+        // Add from text field
+        addFromUrlButton.addActionListener(evt -> {
             String url = urlField.getText().trim();
             if (url.isEmpty()) {
                 JOptionPane.showMessageDialog(frame, "Paste a URL into the box first.");
@@ -156,22 +120,28 @@ private void deleteSelected() {
             urlField.setText("");
         });
         // Enter key in URL box
-        urlField.addActionListener(e -> addFromUrlButton.doClick());
+        urlField.addActionListener(evt -> addFromUrlButton.doClick());
 
-        addLinkButton.addActionListener(e -> addLinkFromClipboardOrPrompt());
-        openButton.addActionListener(e -> openSelected());
+        addLinkButton.addActionListener(evt -> addLinkFromClipboardOrPrompt());
+        openButton.addActionListener(evt -> openSelected());
 
-         // Delete button
-        deleteButton.addActionListener(e -> deleteSelected());
-
-           // Delete key on the list (Delete or Backspace)
+        // Delete button
+        deleteButton.addActionListener(evt -> deleteSelected());
+        // Delete key
         playlistList.addKeyListener(new KeyAdapter() {
-     @Override public void keyPressed(KeyEvent e) {
-        if (e.getKeyCode() == KeyEvent.VK_DELETE || e.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
-            deleteSelected();
-        }
-    }
-});
+            @Override public void keyPressed(KeyEvent evt) {
+                if (evt.getKeyCode() == KeyEvent.VK_DELETE || evt.getKeyCode() == KeyEvent.VK_BACK_SPACE) {
+                    deleteSelected();
+                }
+            }
+        });
+
+        // Save on window close as a safety
+        frame.addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent e) {
+                saveToFile();
+            }
+        });
 
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
@@ -227,6 +197,37 @@ private void deleteSelected() {
         }
     }
 
+    // -------- Delete selected --------
+    private void deleteSelected() {
+        int index = playlistList.getSelectedIndex();
+        if (index < 0) {
+            JOptionPane.showMessageDialog(frame, "Select a song to delete.");
+            return;
+        }
+        LinkItem item = listModel.getElementAt(index);
+
+        int choice = JOptionPane.showConfirmDialog(
+            frame,
+            "Delete \"" + item.title + "\" from \"" + currentMood + "\"?",
+            "Confirm Delete",
+            JOptionPane.YES_NO_OPTION
+        );
+        if (choice != JOptionPane.YES_OPTION) return;
+
+        if ("mixed".equals(currentMood)) {
+            listModel.remove(index); // derived view only
+        } else {
+            List<LinkItem> list = moodData.get(currentMood);
+            if (list != null) {
+                boolean removed = list.remove(item);
+                if (!removed && index < list.size()) list.remove(index);
+            }
+            listModel.remove(index);
+        }
+        nowPlaying.setText("Now Playing: —");
+        saveToFile(); // persist change
+    }
+
     // -------- Add link from clipboard or manual prompt --------
     private void addLinkFromClipboardOrPrompt() {
         try {
@@ -255,6 +256,7 @@ private void deleteSelected() {
             } else {
                 listModel.addElement(item);
             }
+            saveToFile(); // persist change
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(frame, "Could not add link:\n" + ex.getMessage());
         }
@@ -287,9 +289,10 @@ private void deleteSelected() {
         } else {
             listModel.addElement(item);
         }
+        saveToFile(); // persist change
     }
 
-    // -------- Helpers --------
+    // -------- Clipboard helper --------
     private String readUrlFromClipboard() {
         try {
             Toolkit tk = Toolkit.getDefaultToolkit();
@@ -303,10 +306,11 @@ private void deleteSelected() {
         return null;
     }
 
+    // -------- Try to fetch web page <title> --------
     private String tryFetchPageTitle(String urlStr) {
         BufferedReader reader = null;
         try {
-            URL url = new URL(urlStr);
+            URL url = URI.create(urlStr).toURL(); // avoid deprecated ctor warning
             URLConnection conn = url.openConnection();
             conn.setConnectTimeout(4000);
             conn.setReadTimeout(4000);
@@ -327,19 +331,74 @@ private void deleteSelected() {
                 if (title.length() > 120) title = title.substring(0, 117) + "...";
                 return title;
             }
-        } catch (Exception ignore) {    // network blocked is OK; we'll prompt instead
+        } catch (Exception ignore) {
         } finally {
             try { if (reader != null) reader.close(); } catch (IOException ignored) {}
         }
         return null;
     }
 
-    // -------- Seed starter data (editable lists) --------
- private void seedData() {
-    moodData.put("happy",     new ArrayList<>());
-    moodData.put("chill",     new ArrayList<>());
-    moodData.put("energetic", new ArrayList<>());
-    moodData.put("mixed",     new ArrayList<>()); // auto-built when you click Mixed
+    // -------- Persistence helpers (save/load to project file) --------
+    private File dataFile() {
+        // Save inside the project so it can be committed and shared
+        File dir = new File("data");
+        if (!dir.exists()) dir.mkdirs();
+        return new File(dir, "mood_links.txt");
+    }
+
+    private void saveToFile() {
+        try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(
+                new FileOutputStream(dataFile()), "UTF-8"))) {
+            // format: mood|title|url  (escape '|' in title)
+            for (Map.Entry<String, List<LinkItem>> e : moodData.entrySet()) {
+                String mood = e.getKey();
+                if ("mixed".equals(mood)) continue; // derived
+                for (LinkItem li : e.getValue()) {
+                    String cleanTitle = li.title.replace("|", "\\|");
+                    pw.println(mood + "|" + cleanTitle + "|" + li.url);
+                }
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(frame, "Could not save: " + ex.getMessage());
+        }
+    }
+
+    private void loadFromFile() {
+        File f = dataFile();
+        if (!f.exists()) return;
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                new FileInputStream(f), "UTF-8"))) {
+
+            // clear current editable lists
+            List<LinkItem> h = moodData.get("happy");
+            List<LinkItem> c = moodData.get("chill");
+            List<LinkItem> en = moodData.get("energetic");
+            if (h != null) h.clear();
+            if (c != null) c.clear();
+            if (en != null) en.clear();
+
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split("\\|", 3);
+                if (parts.length < 3) continue;
+                String mood  = parts[0];
+                String title = parts[1].replace("\\|", "|");
+                String url   = parts[2];
+                List<LinkItem> list = moodData.get(mood);
+                if (list != null) list.add(new LinkItem(title, url));
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(frame, "Could not load: " + ex.getMessage());
+        }
+    }
+
+    // -------- Seed empty lists --------
+    private void seedData() {
+        moodData.put("happy",     new ArrayList<>());
+        moodData.put("chill",     new ArrayList<>());
+        moodData.put("energetic", new ArrayList<>());
+        moodData.put("mixed",     new ArrayList<>()); // built dynamically
+    }
 }
-}
+
 
