@@ -3,6 +3,11 @@ MoodPlayerApp
 MoodPlayerApp is a beginner-friendly Java desktop application that lets you choose a mood and instantly see a matching playlist of songs you’ve added yourself.
 It uses a simple GUI (Graphical User Interface) built with Java Swing, and opens music links directly in your web browser.
 
+Saved Playlists
+When you run MoodPlayerApp, it automatically loads any songs and links that have been added and saved previously.
+If you download this repository and run the app, you’ll see my preloaded songs in each mood category.
+You can click them to open in your browser, or add/delete your own songs while using the app.
+
 ✨ Features
 Choose from moods like Happy, Chill, Energetic, and Mixed.
 
